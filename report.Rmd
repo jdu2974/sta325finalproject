@@ -12,15 +12,83 @@ library(tidyverse)
 library(readr)
 library(ggplot2)
 library(patchwork)
+library(chron)
+library(lubridate)
+
 
 pbp <- load_pbp(2018:2020)
+pbp$time_of_day  <- strptime(paste("2001-01-01", pbp$time_of_day ), format="%Y-%m-%d %H:%M")
+pbp$time_of_day <- format(round(pbp$time_of_day, units="hours"), format="%H:%M")
+pbp$time_of_day <- ((as.numeric(substr(pbp$time_of_day, 1, 2)) - 5) +24) %% 24
+pbp$time_of_day <- paste0(pbp$time_of_day, ":00")
+pbp$time_of_day[grepl("NA", pbp$time_of_day)] <- NA
+
 weather <- read_csv("weather.csv")
 weather$date <- as.Date(gsub( " .*$", "", weather$TimeMeasure ),  format = "%m/%d/%Y")
-weather_train <- weather %>%
-  filter(date>= as.Date("2018-09-06"))
+weather_clean <- weather %>%
+  filter(date>= as.Date("2018-09-06")) %>%
+  filter(grepl("^.+(00)$", TimeMeasure))
+weather_clean$TimeMeasure <- word(weather_clean$TimeMeasure,-1)
+colnames(weather_clean)[colnames(weather_clean) == "game_id"] <- "old_game_id"
+colnames(weather_clean)[colnames(weather_clean) == "TimeMeasure"] <- "time_of_day"
+weather_clean$old_game_id <- as.character(weather_clean$old_game_id)
 
+merged_df <- merge(pbp, weather_clean, by=c("old_game_id","time_of_day"))
+
+training_data <- merged_df %>%
+  filter(season == 2018 | season == 2019)
+
+test_data <- merged_df %>%
+  filter(season == 2020)
 
 ```
+
+
+# Data Description
+
+We use two datasets in our analysis. 
+
+The first dataset, obtained from Kaggle,
+consists of hourly weather observations recorded from Meteostat and Weather Underground
+for games from the 2000-2001 NFL season to the 2020-2021 NFL season. In total,
+there are 37,155 hourly observations. Each observation relevant weather metrics
+such as temperature (in Fahrenheit), dew point, humidity (0 - 100), precipitation (mm), 
+wind speed (MPH), and estimated condition. The estimated condition is qualitatively
+described, with levels such as clear, heavy rain, moderate rain, light rain, light
+snow, and moderate snow.
+
+The second dataset, obtained from the nflverse R package, consists of play-by-play 
+data for every NFL game since the 1999-2000 NFL season. For our analysis,
+we will only use data from the 2018-2019 to 2020-2021 seasons, in order to align
+our timeframes with the weather observations dataset. In total, there were 144,422
+plays over these three NFL seasons. In addition to play-specific 
+characteristics such as down, yard line, time remaining in quarter, score of game,
+play type, and result of play, each play also records the home and away team and
+the type of stadium in which the game is being played in (outdoors, dome, closed
+stadium, and open stadium).
+
+Although the play-by-play dataset does contain variables describing the weather
+conditions such as temperature and wind speed, it is play-agnostic and therefore
+does not change over the course of the game. This is problematic because we cannot
+assume that weather conditions remain constant as the day progresses. Therefore,
+we cannot rely solely on the play-by-play dataset and must incorporate the hourly
+observations dataset. Both datasets share a common game ID variable and similar
+time of day measurements, so after initial data cleaning (rounding the time of day
+measurements in the play-by-play dataset to the nearest hour to match the format
+of the hourly weather observations, which occur at the start of each hour), we
+are able to merge the two datasets, leaving us with 131,732 plays
+with hourly weather observations.
+
+We will use plays from the 2018-2019 and 2019-2020 seasons as our training set
+(88,005 plays) and plays from the 2020-2021 season (43,626) as our test set (~67-33
+train-test split. 
+
+consists of play by play
+data for NFL games, obtained through the nflverse R package. 
+
+# Variable Selection
+
+
 
 ## EDA
 
@@ -36,6 +104,18 @@ p1 <- ggplot(data = weather_train %>% filter(!is.na(EstimatedCondition)), aes(x 
 
 
 p1 + plot_annotation(title = 'Distribution of Temperature Based on Weather Condition', theme = theme(plot.title = element_text(hjust = 0.5, size = 30)))
+
+fourth_down <- pbp %>%
+  filter(down == 4) %>%
+  group_by(play_type, roof) %>%
+  summarize(count = n()) %>%
+  filter(!(is.na(play_type))) %>%
+  filter(!(play_type == "no_play"))
+
+p2 <- ggplot(data = fourth_down, aes(fill = play_type, x = roof, y = count)) + geom_bar(position="fill", stat="identity") +
+  labs(x = "Type of Stadium", y = "Percentage")
+
+p2 + plot_annotation(title = 'Distribution of 4th Down Plays Based on Type of Stadium', theme = theme(plot.title = element_text(hjust = 0.5, size = 30)))
 ```
 
 ## Including Plots
