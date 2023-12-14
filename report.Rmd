@@ -17,6 +17,8 @@ library(lubridate)
 library(broom)
 library(knitr)
 library(xgboost)
+library(mltools)
+library(data.table)
 
 
 pbp <- load_pbp(2018:2020)
@@ -112,11 +114,30 @@ As there are
 boosting_nf_train <- training_nf_data %>%
   filter(play_type == "pass" | play_type == "run")
 
-wtf <- boosting_nf_train[, sapply(boosting_nf_train, class) == 'character']
+relevant_cols <- c("yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
+                  "game_seconds_remaining", "drive", "qtr", "down", "goal_to_go", 
+                  "total_home_score", "total_away_score", "posteam_score", "defteam_score",
+                  "score_differential", "season", "series", "drive_play_count", "drive_first_downs",
+                   "Temperature", "DewPoint", "Humidity", "Precipitation", "WindSpeed", "Pressure",
+                  "roof", "surface")
+
+boosting_nf_train$roof <- as.factor(boosting_nf_train$roof)
+boosting_nf_train$surface <- as.factor(boosting_nf_train$surface)
+
+one_hot <- one_hot(setDT(boosting_nf_train[, relevant_cols]) )
 
 
-bst <- xgboost(data = as.matrix(boosting_nf_train), label = boosting_nf_train$play_type, max_depth = 2, 
-               eta = 1, nthread = 2, nrounds = 2,objective = "binary:logistic")
+
+xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= as.factor(boosting_nf_train$play_type))
+
+
+xgboost_nf <- xgboost(data = xgboost_train,                    # the data   
+                 max.depth= 10,                          # max depth 
+                 nrounds=100)
+
+xgb.importance(colnames(one_hot), model = xgboost_nf)
+
+
 ```
 
 
