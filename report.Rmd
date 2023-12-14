@@ -14,6 +14,9 @@ library(ggplot2)
 library(patchwork)
 library(chron)
 library(lubridate)
+library(broom)
+library(knitr)
+library(xgboost)
 
 
 pbp <- load_pbp(2018:2020)
@@ -33,13 +36,24 @@ colnames(weather_clean)[colnames(weather_clean) == "game_id"] <- "old_game_id"
 colnames(weather_clean)[colnames(weather_clean) == "TimeMeasure"] <- "time_of_day"
 weather_clean$old_game_id <- as.character(weather_clean$old_game_id)
 
-merged_df <- merge(pbp, weather_clean, by=c("old_game_id","time_of_day"))
+merged_df <- merge(pbp, weather_clean, by=c("old_game_id","time_of_day")) %>%
+  filter(!is.na(down))
 
-training_data <- merged_df %>%
-  filter(season == 2018 | season == 2019)
+training_nf_data <- merged_df %>%
+  filter(season == 2018 | season == 2019) %>%
+  filter(down != 4)
 
-test_data <- merged_df %>%
-  filter(season == 2020)
+training_f_data <- merged_df %>%
+  filter(season == 2018 | season == 2019) %>%
+  filter(down == 4)
+
+test_nf_data <- merged_df %>%
+  filter(season == 2020) %>%
+  filter(down != 4)
+
+test_f_data <- merged_df %>%
+  filter(season == 2020) %>%
+  filter(down == 4)
 
 ```
 
@@ -76,25 +90,60 @@ observations dataset. Both datasets share a common game ID variable and similar
 time of day measurements, so after initial data cleaning (rounding the time of day
 measurements in the play-by-play dataset to the nearest hour to match the format
 of the hourly weather observations, which occur at the start of each hour), we
-are able to merge the two datasets, leaving us with 131,732 plays
+are able to merge the two datasets, and after filtering out plays that do not have
+a specified down (kickoffs, extra points, timeouts), we are left with 112,381 plays
 with hourly weather observations.
 
 We will use plays from the 2018-2019 and 2019-2020 seasons as our training set
-(88,005 plays) and plays from the 2020-2021 season (43,626) as our test set (~67-33
-train-test split. 
+(67720 non-fourth-down plays and 7576 fourth down plays) and plays from the 2020-2021 season 
+(33528 non-fourth-down plays and 3557 fourth down plays) as our test set. This roughly
+corresponds to a 2/3 train-test split for both non-fourth-down and fourth down plays.
 
-consists of play by play
-data for NFL games, obtained through the nflverse R package. 
+
 
 # Variable Selection
 
+We first analyze non fourth down playcalling, with a particular emphasis on deciding
+whether to run or pass. After filtering our non fourth down training dataset to only
+include plays with these outcomes, we are left with 62,251 run or pass plays.
+As there are 
+
+```{r}
+boosting_nf_train <- training_nf_data %>%
+  filter(play_type == "pass" | play_type == "run")
+
+wtf <- boosting_nf_train[, sapply(boosting_nf_train, class) == 'character']
+
+
+bst <- xgboost(data = as.matrix(boosting_nf_train), label = boosting_nf_train$play_type, max_depth = 2, 
+               eta = 1, nthread = 2, nrounds = 2,objective = "binary:logistic")
+```
 
 
 ## EDA
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+First, we consider  playcalling on first, second, and third downs versus fourth
+downs. We first display the number of occurrences of each play type among non-fourth
+down plays versus fourth down plays.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+freq_nf <- as.data.frame(table(training_nf_data$play_type))
+freq_nf$Var1 <- c("Field Goal", "No Play", "Pass", "QB Kneel", "QB Spike", "Run")
+colnames(freq_nf) <- c("Play Type", "Frequency")
+freq_nf %>%
+  kable(digits = 3)
+
+freq_f <- as.data.frame(table(training_f_data$play_type))
+freq_f$Var1 <- c("Field Goal", "No Play", "Pass", "Punt", "QB Kneel", "Run")
+colnames(freq_f) <- c("Play Type", "Frequency")
+freq_f %>%
+  kable(digits = 3)
+```
+
+As expected, coaches will never punt and only kick field goals near the end
+of a half on non fourth downs, while prioritizing punts and field goals on fourth
+down.
+
 
 ```{r, echo = FALSE, fig.height = 7.5, fig.width = 16}
 p1 <- ggplot(data = weather_train %>% filter(!is.na(EstimatedCondition)), aes(x = EstimatedCondition, y= Temperature)) +
