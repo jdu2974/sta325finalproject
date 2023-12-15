@@ -1,5 +1,5 @@
 ---
-title: "NFL Plays"
+title: "Examinng the Imapct of Weather on NFL Decision-Making"
 output:
   pdf_document: default
   html_document: default
@@ -22,11 +22,15 @@ library(data.table)
 
 
 pbp <- load_pbp(2018:2020)
+
+# Data Cleaning
 pbp$time_of_day  <- strptime(paste("2001-01-01", pbp$time_of_day ), format="%Y-%m-%d %H:%M")
 pbp$time_of_day <- format(round(pbp$time_of_day, units="hours"), format="%H:%M")
 pbp$time_of_day <- ((as.numeric(substr(pbp$time_of_day, 1, 2)) - 5) +24) %% 24
 pbp$time_of_day <- paste0(pbp$time_of_day, ":00")
 pbp$time_of_day[grepl("NA", pbp$time_of_day)] <- NA
+pbp$roof[pbp$roof == "open"] <- "outdoors"
+pbp$roof[pbp$roof == "closed"] <- "dome"
 
 weather <- read_csv("weather.csv")
 weather$date <- as.Date(gsub( " .*$", "", weather$TimeMeasure ),  format = "%m/%d/%Y")
@@ -41,30 +45,35 @@ weather_clean$old_game_id <- as.character(weather_clean$old_game_id)
 merged_df <- merge(pbp, weather_clean, by=c("old_game_id","time_of_day")) %>%
   filter(!is.na(down))
 
-training_nf_data <- merged_df %>%
-  filter(season == 2018 | season == 2019) %>%
-  filter(down != 4)
-
-training_f_data <- merged_df %>%
-  filter(season == 2018 | season == 2019) %>%
-  filter(down == 4)
-
-test_nf_data <- merged_df %>%
-  filter(season == 2020) %>%
-  filter(down != 4)
-
-test_f_data <- merged_df %>%
-  filter(season == 2020) %>%
-  filter(down == 4)
-
 ```
 
+# Introduction
 
-# Data Description
+NFL head coaches are constantly under scrutiny, whether warranted or unwarranted,
+for the decisions made over the course of game that ultimately lead to a win or loss.
+Coaches have a variety of options at their disposal depending on the current
+condition and momentum of the game, and most of their decision making stems from
+a primarily objective examination of their team's needs. Third and 10 down 20 points
+in the 4th quarter? In all likelihood a pass play to try and mount a comeback. Fourth and 20 up 
+10? Most likely a punt to minimize the risk of giving good field position to the
+opponent. Coaches, players, and fans can on the whole agree on the right play-call
+in many hypothetical game scenarios.
 
-We use two datasets in our analysis. 
+However, every coach suffers from inherent biases that have the potential to impair
+their judgement and decision making when baselined against a baseline of rationality.
+For example, the hot-hand fallacy has been extensively studied across varying
+sports (though primarily in basketball), with little statistical evidence to 
+support the notion that athletes experiencing a positive outcomes are more 
+likely to experience it repeatedly. Yet in practice, coaches will often revert
+to decision making that has worked in the past in situations that objectively 
+do not justify such a decision.
 
-The first dataset, obtained from Kaggle,
+We believe that NFL coaches also experience bias
+
+
+### Data Description
+
+We use two datasets in our analysis. The first dataset, obtained from Kaggle,
 consists of hourly weather observations recorded from Meteostat and Weather Underground
 for games from the 2000-2001 NFL season to the 2020-2021 NFL season. In total,
 there are 37,155 hourly observations. Each observation relevant weather metrics
@@ -96,38 +105,151 @@ are able to merge the two datasets, and after filtering out plays that do not ha
 a specified down (kickoffs, extra points, timeouts), we are left with 112,381 plays
 with hourly weather observations.
 
+
+### EDA
+
+We first explore the significant of the 112,381 with respect to the current
+game situation. Our dataset contains a win probability variable that describes
+the estimated win probability for the team in possession given the current game conditions 
+at the start of the play. Here we plot the density plot of win probabilities
+
+```{r wp, echo = FALSE}
+ggplot(data = merged_df, aes(x = wp)) +
+  geom_density() +
+  theme_bw() +
+  labs(x = "Win Probability", y = "")
+```
+We observe a trimodal distribution with peaks occurring near a win probability
+of 0, 50, and 100. We are not particularly interested in plays occurring in game
+situations where the outcome is essentially decided, and so we filter out
+plays that occurred in situations where the win probability was less than .10
+or greater than .90. We are now left with 84,890 plays.
+
+```{r wp_clean, echo = FALSE}
+merged_df <- merged_df %>%
+  filter(wp >= .10 & wp <= .90)
+```
+
+From these plays, we consider how playcalling on first, second, and third downs vary versus fourth
+downs. We display the number of occurrences of each play type among non-fourth
+down plays versus fourth down plays from our training datasets.
+
+```{r play_freq,  echo = FALSE}
+freq_nf <- as.data.frame(table(merged_df[merged_df$down != 4,]$play_type))
+freq_nf$Var1 <- c("Field Goal", "No Play", "Pass", "QB Kneel", "QB Spike", "Run")
+colnames(freq_nf) <- c("Play Type", "Frequency")
+kable(freq_nf)
+
+freq_f <- as.data.frame(table(merged_df[merged_df$down == 4,]$play_type))
+freq_f$Var1 <- c("Field Goal", "No Play", "Pass", "Punt", "Run")
+kable(freq_f)
+```
+
+As expected, coaches will never punt and only kick field goals near the end
+of a half on non fourth downs, while prioritizing punts and field goals on fourth
+down. Therefore, for our non-fourth-down analysis, we will only be concerned
+with predicting whether a play is a run or pass (filtering out non-run and non-pass
+plays, or a binary categorical response), and for our fourth down analysis, we will
+focus on predicting four outcomes: punt, kick, run, and pass.
+
+Finally, let's consider whether a stadium having an open versus closed roof affects
+the distribution of 4th down play outcomes. There are 10 NFL stadiums that are
+domed, with 5 having retractable roofs. The play-by-play dataset has four possible
+outcomes for the roof variable: outdoors, open, closed, and dome. We will consider
+a domed stadium that has an open roof for the particular game to be equivalent
+to an outdoors stadium and a domed stadium that has a closed roof for the particular
+game to be equivalent to a non-retractable dome stadium. A closed roof stadium
+will allow for specific climate-control, reducing the influence of external temperature, humidity,
+and wind speed to essentially 0.
+
+```{r, echo = FALSE, fig.height = 7.5, fig.width = 16, fig.cap = "Distribution of  4th Down Plays Based on Type of Stadium"}
+fourth_down <- merged_df %>%
+  filter(down == 4) %>%
+  group_by(play_type, roof) %>%
+  summarize(count = n()) %>%
+  filter(!(is.na(play_type))) %>%
+  filter(!(play_type == "no_play"))
+
+ggplot(data = fourth_down, aes(fill = play_type, x = roof, y = count)) + geom_bar(position="fill", stat="identity") +
+  labs(x = "Type of Stadium", y = "Percentage") +
+  theme_bw()
+```
+
+We see that although the divisions of punt, field goal, run, or pass are relatively
+similar for both outdoor and indoor stadiums, a higher percentage of 4th down
+plays are field goals in domed stadiums than outdoor stadiums, suggesting
+that coaches are cognizant of the effects of weather on effective field-goal
+kicking.
+
+### Train Test Split
+
 We will use plays from the 2018-2019 and 2019-2020 seasons as our training set
-(67720 non-fourth-down plays and 7576 fourth down plays) and plays from the 2020-2021 season 
-(33528 non-fourth-down plays and 3557 fourth down plays) as our test set. This roughly
+(51226 non-fourth-down plays and 5616 fourth down plays) and plays from the 2020-2021 season 
+(25430 non-fourth-down plays and 2618 fourth down plays) as our test set. This roughly
 corresponds to a 2/3 train-test split for both non-fourth-down and fourth down plays.
 
+```{r split,  echo = FALSE}
+training_nf_data <- merged_df %>%
+  filter(season == 2018 | season == 2019) %>%
+  filter(down != 4)
 
+training_f_data <- merged_df %>%
+  filter(season == 2018 | season == 2019) %>%
+  filter(down == 4)
 
-# Variable Selection
+test_nf_data <- merged_df %>%
+  filter(season == 2020) %>%
+  filter(down != 4)
+
+test_f_data <- merged_df %>%
+  filter(season == 2020) %>%
+  filter(down == 4) 
+```
+
+# Non-Fourth Down Analysis
 
 We first analyze non fourth down playcalling, with a particular emphasis on deciding
-whether to run or pass. After filtering our non fourth down training dataset to only
-include plays with these outcomes, we are left with 62,251 run or pass plays.
-As there are 
+whether to run or pass. As we are interested in examining the weather bias, we are only
+interested in examining plays occurring in an open roof setting. Applying these filters,
+we are left with 36,036 observations.
 
-```{r}
+With 383 variables in the training dataset, including many that describe post-play
+statistics (yards gained, turnover, first down conversion, etc.), we perform
+an initial qualitative variable selection process, selecting 30 variables that
+we believe coaches could potentially consider before deciding which play to call. These
+range from numeric variables such as down, yard line, yards to go, and seconds
+remaining in half to categorical variables like type of stadium, type of surface,
+and game half, but all are game conditions pre-determined before the play.
+See appendix for full list of variables. 
+
+To gauge whether such variables appear to be the most influential in predicting
+run or pass plays, we use XgBoost to fit gradient-boosted decision trees
+with our label being the play type. Out of these 30 variables, 5 are categorical, 
+so we perform preprocessing through one-hot-encoding.
+
+
+```{r rel_col, echo = FALSE}
+relevant_cols <- c("week", "posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
+                  "game_seconds_remaining", "game_half", "drive", "qtr", "down", "goal_to_go", "ydstogo",
+                  "posteam_timeouts_remaining", "defteam_timeouts_remaining", "total_home_score", "total_away_score", 
+                  "posteam_score", "defteam_score",
+                   "score_differential", "season", "series", "drive_play_count", "drive_first_downs",
+                   "Temperature", "DewPoint", "Humidity", "Precipitation", "WindSpeed", "Pressure", "surface")
+
+
+```
+
+```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE, eval = FALSE}
 boosting_nf_train <- training_nf_data %>%
-  filter(play_type == "pass" | play_type == "run")
+  filter(play_type == "pass" | play_type == "run") %>%
+  filter(roof == "outdoors")
 
-relevant_cols <- c("yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
-                  "game_seconds_remaining", "drive", "qtr", "down", "goal_to_go", 
-                  "total_home_score", "total_away_score", "posteam_score", "defteam_score",
-                  "score_differential", "season", "series", "drive_play_count", "drive_first_downs",
-                   "Temperature", "DewPoint", "Humidity", "Precipitation", "WindSpeed", "Pressure",
-                  "roof", "surface")
-
-boosting_nf_train$roof <- as.factor(boosting_nf_train$roof)
+boosting_nf_train$posteam_type <- as.factor(boosting_nf_train$posteam_type)
+boosting_nf_train$game_half <- as.factor(boosting_nf_train$game_half)
 boosting_nf_train$surface <- as.factor(boosting_nf_train$surface)
-
+boosting_nf_train$goal_to_go <- as.factor(boosting_nf_train$goal_to_go)
+ 
 one_hot <- one_hot(setDT(boosting_nf_train[, relevant_cols]) )
-
-
-
 xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= as.factor(boosting_nf_train$play_type))
 
 
@@ -135,65 +257,51 @@ xgboost_nf <- xgboost(data = xgboost_train,                    # the data
                  max.depth= 10,                          # max depth 
                  nrounds=100)
 
-xgb.importance(colnames(one_hot), model = xgboost_nf)
-
+xgb_nf <- xgb.importance(colnames(one_hot), model = xgboost_nf)
+xgb_cols <- (xgb_nf %>% filter(Gain >= .01))$Feature
 
 ```
 
+We will consider only variables that have a Gain metric above .01
 
-## EDA
+For first, second, and third downs, we define the 
 
-First, we consider  playcalling on first, second, and third downs versus fourth
-downs. We first display the number of occurrences of each play type among non-fourth
-down plays versus fourth down plays.
+```{r glm_nf, echo = FALSE, eval = FALSE, message = FALSE, warning = FALSE}
+rel_df <- training_nf_data  %>%
+  filter(play_type == "pass" | play_type == "run") %>%
+  filter(roof == "outdoors")
 
-```{r}
-freq_nf <- as.data.frame(table(training_nf_data$play_type))
-freq_nf$Var1 <- c("Field Goal", "No Play", "Pass", "QB Kneel", "QB Spike", "Run")
-colnames(freq_nf) <- c("Play Type", "Frequency")
-freq_nf %>%
-  kable(digits = 3)
+rel_df <- rel_df[, c(xgb_cols, "play_type", "series_success")]
 
-freq_f <- as.data.frame(table(training_f_data$play_type))
-freq_f$Var1 <- c("Field Goal", "No Play", "Pass", "Punt", "QB Kneel", "Run")
-colnames(freq_f) <- c("Play Type", "Frequency")
-freq_f %>%
-  kable(digits = 3)
+form1 <- glm(series_success ~., data = rel_df, family = "binomial")
+summary(form1)
 ```
 
-As expected, coaches will never punt and only kick field goals near the end
-of a half on non fourth downs, while prioritizing punts and field goals on fourth
-down.
+
+# Fourth Down
 
 
-```{r, echo = FALSE, fig.height = 7.5, fig.width = 16}
-p1 <- ggplot(data = weather_train %>% filter(!is.na(EstimatedCondition)), aes(x = EstimatedCondition, y= Temperature)) +
-  geom_boxplot() +
-  theme_bw() +
-  labs(x = "Condition")
+```{r echo = FALSE, eval = FALSE, message = FALSE, warning = FALSE}
+boosting_f_train <- training_f_data %>%
+  filter(play_type == "pass" | play_type == "run" | play_type == "field_goal" | play_type == "punt")
+
+boosting_f_train$roof <- as.factor(boosting_f_train$roof)
+boosting_f_train$posteam_type <- as.factor(boosting_f_train$posteam_type)
+boosting_f_train$game_half <- as.factor(boosting_f_train$game_half)
+boosting_f_train$surface <- as.factor(boosting_f_train$surface)
+boosting_f_train$goal_to_go <- as.factor(boosting_f_train$goal_to_go)
+
+one_hot <- one_hot(setDT(boosting_f_train[, relevant_cols]) )
 
 
-p1 + plot_annotation(title = 'Distribution of Temperature Based on Weather Condition', theme = theme(plot.title = element_text(hjust = 0.5, size = 30)))
 
-fourth_down <- pbp %>%
-  filter(down == 4) %>%
-  group_by(play_type, roof) %>%
-  summarize(count = n()) %>%
-  filter(!(is.na(play_type))) %>%
-  filter(!(play_type == "no_play"))
+xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= as.factor(boosting_f_train$play_type))
 
-p2 <- ggplot(data = fourth_down, aes(fill = play_type, x = roof, y = count)) + geom_bar(position="fill", stat="identity") +
-  labs(x = "Type of Stadium", y = "Percentage")
 
-p2 + plot_annotation(title = 'Distribution of 4th Down Plays Based on Type of Stadium', theme = theme(plot.title = element_text(hjust = 0.5, size = 30)))
+xgboost_f <- xgboost(data = xgboost_train,                    # the data   
+                 max.depth= 10,                          # max depth 
+                 nrounds=100)
+
+xgb.importance(colnames(one_hot), model = xgboost_f)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
