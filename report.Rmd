@@ -119,6 +119,7 @@ ggplot(data = merged_df, aes(x = wp)) +
   theme_bw() +
   labs(x = "Win Probability", y = "")
 ```
+
 We observe a trimodal distribution with peaks occurring near a win probability
 of 0, 50, and 100. We are not particularly interested in plays occurring in game
 situations where the outcome is essentially decided, and so we filter out
@@ -262,9 +263,22 @@ xgb_cols <- (xgb_nf %>% filter(Gain >= .01))$Feature
 
 ```
 
-We will consider only variables that have a Gain metric above .01
+We find that Pressure, Humidity, DewPoint, and Temperature have some of the 
+highest feature scores (as quantified by Gain), indicating that such conditions 
+are influential for predicting a coach's decision to run or pass. But do such
+weather conditions have a statistically significant relationship to the outcome
+of the particular play?
 
-For first, second, and third downs, we define the 
+We consider a successful outcome on non-fourth down plays to be either a first
+down conversion or a touchdown. Therefore, we proceed with fitting a logistic regression model
+with the response being a binary variable that records whether or not the play
+satisfied the aforementioned conditions. We fit the model with all predictors 
+that recorded a Gain metric above .01 in our gradient-boosted model, with an 
+exception for precipitation as we want to conduct inference on all weather predictors. 
+We now include play type as a predictor
+to control for differences in run and pass plays. We display the estimates
+for our weather predictors.
+
 
 ```{r glm_nf, echo = FALSE, eval = FALSE, message = FALSE, warning = FALSE}
 rel_df <- training_nf_data  %>%
@@ -277,6 +291,10 @@ form1 <- glm(series_success ~., data = rel_df, family = "binomial")
 summary(form1)
 ```
 
+At an alpha level of .05, we observe that pressure, humidity, dewpoint, and 
+temperature are not statistically significant, though wind speed is. There is
+a disconnect between the perceived influence of weather on a coach's decision
+to run or pass and the impact of weather on successful play outcomes.
 
 # Fourth Down
 
