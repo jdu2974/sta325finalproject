@@ -417,12 +417,11 @@ error_rate <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
 
 # Fourth Down
 
-# Fourth Down
 
 Now, we want to look at the other aspect of fourth down play-calling: Fourth Down decision making. At each fourth down event, an offense has three decisions that can be made: go for it (i.e. call a run or pass play to try and get a first down), punt, or kick a field goal. First, we run a similar model where we determine the features that are important, and then use those features to implement a multinomial logistic regression model. Fourth down decision making is more clear cut than run/pass decision making, so we will filter the dataset to only include plays where outcomes may be more ambiguous
 
 
-```{r echo = FALSE, eval = FALSE, message = FALSE, warning = FALSE}
+```{r echo = FALSE, message = FALSE, warning = FALSE, output = FALSE,  results='hide'}
 relevant_cols <- c("posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
                   "game_seconds_remaining", "game_half", "drive", "qtr", "down", "goal_to_go", "ydstogo",
                   "posteam_timeouts_remaining", "defteam_timeouts_remaining",
@@ -452,14 +451,25 @@ xgboost_f <- xgboost(data = xgboost_train,                    # the data
                  max.depth= 10,                          # max depth 
                  nrounds=100)
 
-xgb_f <- xgb.importance(colnames(one_hot), model = xgboost_f)
-xgb.plot.importance(xgb_f)
-xgb_cols <- (xgb_f %>% filter(Gain >= .05))$Feature
 ```
 
-Now, we run a logistic regression model to determine if weather has a significant effect on play outcomes. Instead of using series success rate as the response variable for this model, we choose to use the result of the game (1 if the possession team wins and 0 if the possession team loses) as a proxy for measuring success of plays. 
+```{r}
+xgb_f <- xgb.importance(colnames(one_hot), model = xgboost_f)
+xgb.plot.importance(xgb_f)
+```
+
+
+Now, we run a logistic regression model to determine if weather has a significant effect on play outcomes. Instead of using series success rate as the response variable for this model, we choose to use the result of the game (1 if the possession team wins and 0 if the possession team loses) as a proxy for measuring success of plays. Below is the full model
+
+$$Pr(\text{Outcome}_i = \text{Win}) = \pi_i$$
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1{\text{Pressure}} + \beta_2{\text{Wind Speed}} + \beta_3{\text{Humidity}} + \beta_4{\text{Temperature}} + \beta_5{\text{Precipitation}} + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 8}^{p}\beta_jX_j$$
+
+$\beta_7 ... \beta_9$ indicate the the play types for which we are predicting outcomes. In our regression, the field goal play type is the base group.
+
+$\sum_{j = 8}^{p}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
 ```{r}
+xgb_cols <- (xgb_f %>% filter(Gain >= .05))$Feature
 rel_df <- training_f_data  %>%
   filter(play_type == "pass" | play_type == "run" | play_type == "field_goal" | play_type == "punt") %>%
   filter((wp <= .90) | (wp >= .1)) %>%
@@ -486,4 +496,5 @@ f %>%
   kable(digits = 3)
 ```
 
-From the model, we can see that weather has no significant impact on the outcome of plays in terms of their ability to increase or decrease win probability, holding all other factors equal. This is indicated by the fact that all weather related variables have p-values > .05. The interpretation of both our tree based model and our logistic regression model in terms of our project objects is that while weather does not have an impact on coaching decision-making on 4th downs, it means that coaches are probably correct in that weather should not have an impact on coaching decision-making on 4th downs.
+From the model, we can see that the only weather variable that has a significant impact on play outcomes (in terms of wins and losses) is wind speed. This is indicated by the fact that it is the only weather variable that has a p-value < .05. 
+
