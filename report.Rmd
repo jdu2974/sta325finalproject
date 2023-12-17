@@ -88,22 +88,41 @@ on NFL games, and most of that has been amateur-led and conducted with a primary
 focus on exploiting sports betting inefficiencies.
 
 Entering the game, coaches have generally prepared for the climate conditions
-and have adjusted their gameplans accordingly. Yet over the course of the game,
+and have adjusted their game plans accordingly. Yet over the course of the game,
 numerous scenarios emerge that warrant a particular play whose success rate may
 be hindered as a result of the weather. In these situations, how does a coach
-assess the gravity of weather? We investigate this phenomonon through three main
+assess the gravity of weather? We investigate this phenomenon through three main
 research questions:
 
 1. For non fourth down plays in which the coach predominantly decides to run
 or pass, do the weather conditions impact the coach's ultimate decision making?
 
 2. Similarly, for fourth down plays in which the decision tree expands to include
-punting and kicking a field coach, do the weather conditions play any role in
+punting and kicking a field goal, do the weather conditions play any role in
 influencing the coach's ultimate decision-making?
 
 3. For both non fourth down and fourth down plays, do weather conditions have 
 any impact on the probability of a successful outcome (first down, touchdown,
 field goal made, punt that pins opponent deep in their territory)?
+
+We hope that our findings will be informative in uncovering any systematic
+bias in either the overestimation or underestimation of weather conditions
+by NFL coaches, allowing them to tailor their play calling in a way that
+best positions their team for success.
+
+### Proposed Methodology
+
+We divide our analysis into non fourth down and fourth down situations
+because each scenario considers a different set of options (run and pass on 
+non fourth downs, with the added optionality of kicking a field goal or punting
+on fourth downs). Because there are so many potential variables that affect the decision to run
+pass, punt, or kick, we will use gradient boosting to fit decision trees predicting
+the end play call of a particular situation in order to gauge feature importance and
+see if weather conditions appear to be "important" in predicting a coach's decision-making.
+From there, we will fit two logistic regression models with the features we deemed
+relevant, with the response variables being outcomes of success for the particular
+down (first down and touchdown for non fourth down plays, ___ for fourth down
+plays).
 
 ### Data Description
 
@@ -290,6 +309,8 @@ xgboost_nf <- xgboost(data = xgboost_train,                    # the data
                  nrounds=100)
 
 xgb_nf <- xgb.importance(colnames(one_hot), model = xgboost_nf)
+xgb.plot.importance(xgb_nf)
+
 xgb_cols <- (xgb_nf %>% filter(Gain >= .01))$Feature
 
 ```
@@ -310,20 +331,27 @@ We now include play type as a predictor
 to control for differences in run and pass plays. We display the estimates
 for our weather predictors.
 
-
-```{r glm_nf, echo = FALSE, eval = FALSE, message = FALSE, warning = FALSE}
+```{r glm_nf, echo = FALSE, message = FALSE, warning = FALSE}
 rel_df <- training_nf_data  %>%
   filter(play_type == "pass" | play_type == "run") %>%
   filter(roof == "outdoors")
 
-rel_df <- rel_df[, c(xgb_cols, "play_type", "series_success")]
+rel_df <- rel_df[, c(xgb_cols, "play_type", "series_success", "Precipitation")]
 
-form1 <- glm(series_success ~., data = rel_df, family = "binomial")
-summary(form1)
+nf_model <- glm(series_success ~., data = rel_df, family = "binomial")
+
+nf <- summary(nf_model)
+nf <- nf$coefficients[c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed", "Precipitation"), ]
+nf <- as.data.frame(nf)
+colnames(nf) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
+rownames(nf) <- c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed", "Precipitation")
+nf %>%
+      mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  kable(digits = 3)
 ```
 
-At an alpha level of .05, we observe that pressure, humidity, dewpoint, and 
-temperature are not statistically significant, though wind speed is. There is
+At an alpha level of .05, we observe that pressure, humidity, dewpoint, temperature,
+and precipitation are not statistically significant, though wind speed is. There is
 a disconnect between the perceived influence of weather on a coach's decision
 to run or pass and the impact of weather on successful play outcomes.
 
