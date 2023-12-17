@@ -19,6 +19,7 @@ library(knitr)
 library(xgboost)
 library(mltools)
 library(data.table)
+library(MASS)
 
 
 pbp <- load_pbp(2018:2020)
@@ -166,7 +167,7 @@ game situation. Our dataset contains a win probability variable that describes
 the estimated win probability for the team in possession given the current game conditions 
 at the start of the play. Here we plot the density plot of win probabilities
 
-```{r wp, echo = FALSE}
+```{r wp, echo = FALSE, fig.height = 7.5, fig.width = 16, fig.cap = "Distribution of Win Probability on Plays"}
 ggplot(data = merged_df, aes(x = wp)) +
   geom_density() +
   theme_bw() +
@@ -186,16 +187,22 @@ merged_df <- merged_df %>%
 
 From these plays, we consider how playcalling on first, second, and third downs vary versus fourth
 downs. We display the number of occurrences of each play type among non-fourth
-down plays versus fourth down plays from our training datasets.
+down plays versus fourth down plays from our training datasets. First, for non
+fourth down plays:
 
 ```{r play_freq,  echo = FALSE}
 freq_nf <- as.data.frame(table(merged_df[merged_df$down != 4,]$play_type))
 freq_nf$Var1 <- c("Field Goal", "No Play", "Pass", "QB Kneel", "QB Spike", "Run")
 colnames(freq_nf) <- c("Play Type", "Frequency")
 kable(freq_nf)
+```
 
+Then, for fourth down plays:
+
+```{r, echo = FALSE}
 freq_f <- as.data.frame(table(merged_df[merged_df$down == 4,]$play_type))
 freq_f$Var1 <- c("Field Goal", "No Play", "Pass", "Punt", "Run")
+colnames(freq_f) <- c("Play Type", "Frequency")
 kable(freq_f)
 ```
 
@@ -259,6 +266,8 @@ test_f_data <- merged_df %>%
 
 # Non-Fourth Down Analysis
 
+### Training
+
 We first analyze non fourth down playcalling, with a particular emphasis on deciding
 whether to run or pass. As we are interested in examining the weather bias, we are only
 interested in examining plays occurring in an open roof setting. Applying these filters,
@@ -276,8 +285,8 @@ See appendix for full list of variables.
 To gauge whether such variables appear to be the most influential in predicting
 run or pass plays, we use XgBoost to fit gradient-boosted decision trees
 with our label being the play type. Out of these 30 variables, 5 are categorical, 
-so we perform preprocessing through one-hot-encoding.
-
+so we perform preprocessing through one-hot-encoding. We use a max tree depth
+of 10 and 100 rounds. Here we plot the importance feature graph from the model.
 
 ```{r rel_col, echo = FALSE}
 relevant_cols <- c("week", "posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
@@ -290,7 +299,7 @@ relevant_cols <- c("week", "posteam_type", "yardline_100", "quarter_seconds_rema
 
 ```
 
-```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE, eval = FALSE}
+```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE, results='hide'}
 boosting_nf_train <- training_nf_data %>%
   filter(play_type == "pass" | play_type == "run") %>%
   filter(roof == "outdoors")
@@ -299,23 +308,27 @@ boosting_nf_train$posteam_type <- as.factor(boosting_nf_train$posteam_type)
 boosting_nf_train$game_half <- as.factor(boosting_nf_train$game_half)
 boosting_nf_train$surface <- as.factor(boosting_nf_train$surface)
 boosting_nf_train$goal_to_go <- as.factor(boosting_nf_train$goal_to_go)
+boosting_nf_train$play_type <- ifelse(boosting_nf_train$play_type == "pass", 1, 0)
  
 one_hot <- one_hot(setDT(boosting_nf_train[, relevant_cols]) )
-xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= as.factor(boosting_nf_train$play_type))
+xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= boosting_nf_train$play_type)
 
 
 xgboost_nf <- xgboost(data = xgboost_train,                    # the data   
                  max.depth= 10,                          # max depth 
-                 nrounds=100)
-
-xgb_nf <- xgb.importance(colnames(one_hot), model = xgboost_nf)
-xgb.plot.importance(xgb_nf)
-
-xgb_cols <- (xgb_nf %>% filter(Gain >= .01))$Feature
+                 nrounds=100, objective = "binary:logistic")
 
 ```
 
-We find that Pressure, Humidity, DewPoint, and Temperature have some of the 
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+xgb_nf <- xgb.importance(colnames(one_hot), model = xgboost_nf)
+
+xgb.plot.importance(xgb_nf)
+
+xgb_cols <- (xgb_nf %>% filter(Gain >= .01))$Feature
+```
+Our training log loss was .22. From the feature importance graph,
+we find that Pressure, Humidity, DewPoint, and Temperature have some of the 
 highest feature scores (as quantified by Gain), indicating that such conditions 
 are influential for predicting a coach's decision to run or pass. But do such
 weather conditions have a statistically significant relationship to the outcome
@@ -336,7 +349,7 @@ rel_df <- training_nf_data  %>%
   filter(play_type == "pass" | play_type == "run") %>%
   filter(roof == "outdoors")
 
-rel_df <- rel_df[, c(xgb_cols, "play_type", "series_success", "Precipitation")]
+rel_df <- rel_df[, c(xgb_cols, "play_type", "Precipitation", "series_success")]
 
 nf_model <- glm(series_success ~., data = rel_df, family = "binomial")
 
@@ -348,12 +361,55 @@ rownames(nf) <- c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed",
 nf %>%
       mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
   kable(digits = 3)
+
 ```
 
 At an alpha level of .05, we observe that pressure, humidity, dewpoint, temperature,
-and precipitation are not statistically significant, though wind speed is. There is
-a disconnect between the perceived influence of weather on a coach's decision
+and precipitation are not statistically significant, though wind speed is, even after
+controlling for type of play. There is a disconnect between the perceived influence of weather on a coach's decision
 to run or pass and the impact of weather on successful play outcomes.
+Backwards selection with our full model resulted in only temperature, dewpoint,
+week of game, and seconds remaining in game variables being removed.
+
+### Testing
+
+We use the same gradient-boosted model on our test dataset of 2020 plays, and we
+find that 
+
+```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE, results='hide'}
+boosting_nf_test <- test_nf_data %>%
+  filter(play_type == "pass" | play_type == "run") %>%
+  filter(roof == "outdoors")
+
+boosting_nf_test$posteam_type <- as.factor(boosting_nf_test$posteam_type)
+boosting_nf_test$game_half <- as.factor(boosting_nf_test$game_half)
+boosting_nf_test$surface <- as.factor(boosting_nf_test$surface)
+boosting_nf_test$goal_to_go <- as.factor(boosting_nf_test$goal_to_go)
+boosting_nf_test$play_type <- ifelse(boosting_nf_test$play_type == "pass", 1, 0)
+one_hot_testnf <- one_hot(setDT(boosting_nf_test[, relevant_cols]) )
+one_hot_testnf$surface_a_turf = 0
+
+one_hot_testnf <- one_hot_testnf %>% relocate(surface_a_turf, .before = surface_astroturf)
+
+y_pred <- predict(xgboost_nf, as.matrix(one_hot_testnf))
+y_pred <- ifelse(y_pred >.5, 1, 0)
+
+```
+
+Here we plot the confusion matrix, where the error rate is 35%.
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+conf_matrix <- table(Actual = boosting_nf_test$play_type, Predicted = y_pred)
+
+conf_matrix
+
+error_rate <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+
+```
+
+
+
 
 # Fourth Down
 
@@ -367,7 +423,7 @@ boosting_f_train$game_half <- as.factor(boosting_f_train$game_half)
 boosting_f_train$surface <- as.factor(boosting_f_train$surface)
 boosting_f_train$goal_to_go <- as.factor(boosting_f_train$goal_to_go)
 
-one_hot <- one_hot(setDT(boosting_f_train[, relevant_cols]) )
+one_hot_testnf <- one_hot(setDT(boosting_f_train[, relevant_cols]) )
 
 
 
