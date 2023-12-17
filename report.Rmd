@@ -375,45 +375,6 @@ to run or pass and the impact of weather on successful play outcomes.
 Backwards selection with our full model resulted in only temperature, dewpoint,
 week of game, and seconds remaining in game variables being removed.
 
-### Testing
-
-We use the same gradient-boosted model on our test dataset of 2020 plays, and we
-find that 
-
-```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE, results='hide'}
-boosting_nf_test <- test_nf_data %>%
-  filter(play_type == "pass" | play_type == "run") %>%
-  filter(roof == "outdoors")
-
-boosting_nf_test$posteam_type <- as.factor(boosting_nf_test$posteam_type)
-boosting_nf_test$game_half <- as.factor(boosting_nf_test$game_half)
-boosting_nf_test$surface <- as.factor(boosting_nf_test$surface)
-boosting_nf_test$goal_to_go <- as.factor(boosting_nf_test$goal_to_go)
-boosting_nf_test$play_type <- ifelse(boosting_nf_test$play_type == "pass", 1, 0)
-one_hot_testnf <- one_hot(setDT(boosting_nf_test[, relevant_cols]) )
-one_hot_testnf$surface_a_turf = 0
-
-one_hot_testnf <- one_hot_testnf %>% relocate(surface_a_turf, .before = surface_astroturf)
-
-y_pred <- predict(xgboost_nf, as.matrix(one_hot_testnf))
-y_pred <- ifelse(y_pred >.5, 1, 0)
-
-```
-
-Here we plot the confusion matrix, where the error rate is 35%.
-
-
-```{r echo = FALSE, message = FALSE, warning = FALSE}
-conf_matrix <- table(Actual = boosting_nf_test$play_type, Predicted = y_pred)
-
-conf_matrix
-
-error_rate <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
-
-```
-
-
-
 
 # Fourth Down
 
@@ -469,7 +430,7 @@ $\beta_7 ... \beta_9$ indicate the the play types for which we are predicting ou
 $\sum_{j = 8}^{p}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
 ```{r}
-xgb_cols <- (xgb_f %>% filter(Gain >= .05))$Feature
+xgb_cols <- (xgb_f %>% filter(Gain >= .005))$Feature
 rel_df <- training_f_data  %>%
   filter(play_type == "pass" | play_type == "run" | play_type == "field_goal" | play_type == "punt") %>%
   filter((wp <= .90) | (wp >= .1)) %>%
@@ -486,9 +447,9 @@ rel_df <- rel_df[, c(xgb_cols, "play_type", "Precipitation", "label")]
 
 f_model <- glm(label ~., data = rel_df, family = "binomial")
 
-f <- summary(nf_model)
-f <- nf$coefficients[c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed", "Precipitation"), ]
-f <- as.data.frame(nf)
+f <- summary(f_model)
+f <- f$coefficients[c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed", "Precipitation"),]
+f <- as.data.frame(f)
 colnames(f) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
 rownames(f) <- c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed", "Precipitation")
 f %>%
@@ -497,4 +458,8 @@ f %>%
 ```
 
 From the model, we can see that the only weather variable that has a significant impact on play outcomes (in terms of wins and losses) is wind speed. This is indicated by the fact that it is the only weather variable that has a p-value < .05. 
+
+# Conclusion
+
+Through the lens of two different game scenarios (runs/passes in early down situations, fourth downs), we were able to assess the validity of the two hypothesis that we made 
 
