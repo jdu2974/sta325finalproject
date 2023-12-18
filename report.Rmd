@@ -223,7 +223,7 @@ game to be equivalent to a non-retractable dome stadium.
 
 \newpage
 
-```{r, echo = FALSE, fig.height = 7.5, fig.width = 16, fig.cap = "Distribution of  4th Down Plays Based on Type of Stadium"}
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height = 7.5, fig.width = 16, fig.cap = "Distribution of 4th Down Plays Based on Type of Stadium"}
 fourth_down <- merged_df %>%
   filter(down == 4) %>%
   group_by(play_type, roof) %>%
@@ -249,6 +249,7 @@ We will use plays from the 2018-2019 and 2019-2020 seasons as our training set
 (51226 non-fourth-down plays and 5616 fourth down plays) and plays from the 2020-2021 season 
 (25430 non-fourth-down plays and 2618 fourth down plays) as our test set. This roughly
 corresponds to a 2/3 train-test split for both non-fourth-down and fourth down plays.
+See appendix for the results of our models on the 2020 test data.
 
 ```{r wtf,  echo = FALSE}
 training_nf_data <- merged_df %>%
@@ -349,12 +350,12 @@ exception for precipitation as we want to conduct inference on all weather predi
 We now include play type as a predictor to control for differences in run and pass plays. 
 Here we display the full model:
 
-$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_7{\text{Run}}  + \sum_{j = 8}^{23}\beta_jX_j$$
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_7{\text{Run}}  + \sum_{j = 8}^{22}\beta_jX_j$$
 In our regression, the pass play type is the base group.
 
 $\beta_1... \beta_6$ indicate the 6 weather related variables included in the model: Pressure, Temperature, Wind Speed, Humidity, Precipitation, and Dew Point
 
-$\sum_{j = 8}^{23}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
+$\sum_{j = 8}^{22}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
 ```{r glm_nf, echo = FALSE, message = FALSE, warning = FALSE}
 rel_df <- training_nf_data  %>%
@@ -429,7 +430,7 @@ xgboost_f <- xgboost(data = xgboost_train,                    # the data
 
 ```
 
-```{r message = FALSE, warning = FALSE}
+```{r message = FALSE, warning = FALSE, echo = FALSE}
 xgb_f <- xgb.importance(colnames(one_hot), model = xgboost_f)
 xgb.plot.importance(xgb_f)
 ```
@@ -451,13 +452,13 @@ exception for precipitation as we want to conduct inference on all weather predi
 Below is the full model:
 
 $$Pr(\text{Outcome}_i = \text{Win}) = \pi_i$$
-$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 10}^{18}\beta_jX_j$$
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 10}^{19}\beta_jX_j$$
 
 $\beta_1... \beta_6$ indicate the 6 weather related variables included in the model: Pressure, Temperature, Wind Speed, Humidity, Precipitation, and Dew Point
 
 $\beta_7 ... \beta_9$ indicate the the play types for which we are predicting outcomes. In our regression, the field goal play type is the base group.
 
-$\sum_{j = 10}^{18}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
+$\sum_{j = 10}^{19}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
 ```{r echo = FALSE, warning = FALSE, message = FALSE}
 xgb_cols <- (xgb_f %>% filter(Gain >= .005))$Feature
@@ -499,6 +500,8 @@ Through the lens of two different game scenarios (runs/passes in early down situ
 
 There are also avenues for future research in this area. In both logistic regression models, we defined the idea of play efficiency using different parameters - "Success", or getting a first down/touchdown on a play for our non-fourth down model, and whether or not the team ends up winning or losing for the fourth down model. These are both proxies of efficiency. In reality, there is no perfect way to determine how efficient a play is, but there are avenues a researcher could take. One way is to create a win probability model that measures probability of winning before a play and after a play, and use the difference in win probability before and after as a measurement of the efficiency of a play. 
 
+\newpage
+
 # Appendix
 
 ### Non Fourth Down Test Dataset
@@ -537,13 +540,16 @@ conf_matrix <- table(Actual = boosting_nf_test$play_type, Predicted = y_pred)
 rownames(conf_matrix) <- c("Run", "Pass")
 colnames(conf_matrix) <- c("Run", "Pass")
 
-conf_matrix
+conf_matrix %>%
+  kable()
 ```
+
 ### Fourth Down Test Dataset
 
-We use the same gradient-boosted model on our test dataset of 2020 plays. First,
-we plot the confusion matrix for non fourth down plays, where the error rate is
-41%. We notice that while the model is very good at classifying punt situations
+We use the same gradient-boosted model on our test dataset of 2020 plays, where
+our error rate is 41%. This is extremely high and unexpected given our
+log loss from our test data.
+We notice that while the model is very good at classifying punt situations
 as punts (as punting is often times the only option if the team with possession
 is in their own territory), it incorrectly classified many field goals as run plays.
 
@@ -585,7 +591,8 @@ confusion_matrix <- table(Actual = boosting_f_test$play_type, Predicted = y_pred
 rownames(confusion_matrix) <- c("Field Goal", "Pass", "Punt", "Run")
 colnames(confusion_matrix) <- c("Field Goal", "Pass", "Punt", "Run")
 
-confusion_matrix
+confusion_matrix %>%
+  kable()
 ```
 \newpage
 
