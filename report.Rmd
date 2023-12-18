@@ -350,11 +350,13 @@ exception for precipitation as we want to conduct inference on all weather predi
 We now include play type as a predictor to control for differences in run and pass plays. 
 Here we display the full model:
 
-$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1{\text{Pressure}} + \beta_2{\text{Wind Speed}} + \beta_3{\text{Humidity}} + \beta_4{\text{Temperature}} + \beta_5{\text{Precipitation}} + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}}  + \sum_{j = 8}^{18}\beta_jX_j$$
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}}  + \sum_{j = 8}^{18}\beta_jX_j$$
 
 In our regression, the pass play type is the base group.
 
-$\sum_{j = 8}^{18}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
+$\beta_1... \beta_6$ indicate the 6 weather related variables included in the model: Pressure, Temperature, Wind Speed, Humidity, Precipitation, and Dew Point
+
+$\sum_{j = 8}^{24}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
 ```{r glm_nf, echo = FALSE, message = FALSE, warning = FALSE}
 rel_df <- training_nf_data  %>%
@@ -446,7 +448,8 @@ exception for precipitation as we want to conduct inference on all weather predi
 Below is the full model:
 
 $$Pr(\text{Outcome}_i = \text{Win}) = \pi_i$$
-$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1{\text{Pressure}} + \beta_2{\text{Wind Speed}} + \beta_3{\text{Humidity}} + \beta_4{\text{Temperature}} + \beta_5{\text{Precipitation}} + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 10}^{18}\beta_jX_j$$
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 10}^{19}\beta_jX_j$$
+$\beta_1... \beta_6$ indicate the 6 weather related variables included in the model: Pressure, Temperature, Wind Speed, Humidity, Precipitation, and Dew Point
 
 $\beta_7 ... \beta_9$ indicate the the play types for which we are predicting outcomes. In our regression, the field goal play type is the base group.
 
@@ -479,16 +482,35 @@ f %>%
   kable(digits = 3)
 ```
 
-At an alpha level of .05, we observe that pressure, humidity, dewpoint, temperature,
-and precipitation are not statistically significant, though wind speed is, even after
+At an alpha level of .05, we observe that none of the weather variables: pressure, humidity, dewpoint, temperature,
+and precipitation are statistically significant, even after
 controlling for the type of play in the particular game scenario. 
 There is a disconnect between the perceived influence of weather on a coach's decision
 to run or pass and the impact of weather on successful play outcomes. We determine
 that weather does not particularly drive a coach's decision-making on fourth down,
 and that the current game circumstances (yards to go and yardline) predominantly
-drive decisionmaking.
+drive decision making.
+
 
 # Conclusion
 
-Through the lens of two different game scenarios (runs/passes in early down situations, fourth downs), we were able to assess the validity of the two hypothesis that we made 
+Through the lens of two different game scenarios (runs/passes in early down situations, fourth downs), we were able to assess the validity of the two hypothesis that we made. First, we see that our hypothesis about weather impacting coaches was true. Based on the results of our tree models, there are weather variables that are predictors of play outcomes, both in the run/pass model and the fourth-down model. However, our second hypothesis, that weather would be a predictor of play success was not true. Temperature predictors were not significant predictors of success in both models. These takeaways have noteable impacts from different perspectives. The first is from the perspective of an NFL coach. It seems that coaches do take into account weather in decision-making. Based on the results of our logistic regression models, this is mis-informed, as weather has no significant impact on how impactful a play is. Therefore, coaches are likely making sub-optimal decision making in the face of different weather conditions. As the NFL is the highest level of football on the world, coaches need to find every opportunity they can to maximize win probability, and weather-related decision making is one area where they are failing. The second impact is from the perspective of a sports bettor. These models can allow a sports bettor to find the scenarios in which weather will have an impact on predicted play probabilities. Since we have established that these are the scenarios in which a coach is likely to make a sub-optimal decision, it opens opportunities for a bettor to bet against the coach on the team that they are playing. Of course, determining whether or not this is a legitimate strategy would take  back-testing, but the results of our models would certaintly catch the eye of any bettor looking to take advantage of mispricing of betting odds.
+
+There are also avenues for future research in this area. In both logistic regression models, we defined the idea of play efficiency using different parameters - "Sucess", or getting a first down/touchdown on a play for our non-fourth down model, and whether or not the team ends up winning or losing for the fourth down model. These are both proxies of efficiency. In reality, there is no perfect way to determine how efficient a play is, but there are avenues a researcher could take. One way is to create a win probability model that measures probability of winning before a play and after a play, and use the difference in win probability before and after as a measurement of the efficiency of a play. 
+
+# Appendix
+
+## Model Diagnostics: Run/Pass Model on Non-Fourth Down Plays
+
+```{r}
+plot(nf_model)
+```
+
+## Model Diagnostics: Fourth Down Model
+
+```{r}
+plot(f_model)
+```
+
+
 
