@@ -233,8 +233,7 @@ fourth_down <- merged_df %>%
 
 ggplot(data = fourth_down, aes(fill = play_type, x = roof, y = count)) + geom_bar(position="fill", stat="identity") +
   labs(x = "Type of Stadium", y = "Percentage") +
-  theme(axis.text=element_text(size=20), legend.text = element_text(size=20)) +
-  theme_bw()
+  theme_bw(base_size = 22)
 ```
 
 We see that although the divisions of punt, field goal, run, or pass are relatively
@@ -349,6 +348,8 @@ that recorded a Gain metric above .01 in our gradient-boosted model, with an
 exception for precipitation as we want to conduct inference on all weather predictors. 
 We now include play type as a predictor to control for differences in run and pass plays. 
 Here we display the full model:
+
+$$Pr(\text{Outcome}_i = \text{First Down or Touchdown}) = \pi_i$$
 
 $$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \sum_{j = 1}^{6}\beta_jX_j + \beta_7{\text{Run}}  + \sum_{j = 8}^{22}\beta_jX_j$$
 In our regression, the pass play type is the base group.
