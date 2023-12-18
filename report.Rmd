@@ -218,7 +218,7 @@ Finally, let's consider whether a stadium having an open versus closed roof affe
 the distribution of 4th down play outcomes. The play-by-play dataset has four possible
 outcomes for the roof variable: outdoors, open, closed, and dome. We will consider
 a domed stadium that has an open roof for the particular game to be equivalent
-to an outdoors stadium and a domed stadium that has a closed roof for the particular
+to an outdoor stadium and a domed stadium that has a closed roof for the particular
 game to be equivalent to a non-retractable dome stadium. 
 
 \newpage
@@ -386,11 +386,11 @@ to run or pass and the impact of weather on successful play outcomes.
 Now, we want to look at the other aspect of fourth down play-calling: fourth down decision-making. 
 At each fourth down event, an offense has three decisions that can be made: go for it 
 (i.e. call a run or pass play to try and get a first down, punt, or kick a field goal). 
-First, we  where we determine the features that are important (XgBoost to fit gradient-boosted decision trees),
+First, we determine the features that are important (XgBoost to fit gradient-boosted decision trees),
 and then use those features to implement a multinomial logistic regression model. 
 Fourth down decision-making is more clear cut than run/pass decision-making, so 
 we will filter the dataset to only include plays where outcomes may be more ambiguous
-(i.e. not going for fourth down on fourth and 20 or when the team with posession
+(i.e. not going for fourth down on fourth and 20 or when the team with possession
 is at their own 10 yard line).
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE, output = FALSE,  results='hide'}
@@ -493,12 +493,11 @@ that weather does not particularly drive a coach's decision-making on fourth dow
 and that the current game circumstances (yards to go and yardline) predominantly
 drive decision-making.
 
-
 # Conclusion
 
-Through the lens of two different game scenarios (runs/passes in early down situations, fourth downs), we were able to assess the validity of the two hypothesis that we made. First, we see that our hypothesis about weather impacting coaches was true. Based on the results of our tree models, there are weather variables that are predictors of play outcomes, both in the run/pass model and the fourth-down model. However, our second hypothesis, that weather would be a predictor of play success was not true. Temperature predictors were not significant predictors of success in both models. These takeaways have noteable impacts from different perspectives. The first is from the perspective of an NFL coach. It seems that coaches do take into account weather in decision-making. Based on the results of our logistic regression models, this is mis-informed, as weather has no significant impact on how impactful a play is. Therefore, coaches are likely making sub-optimal decision-making in the face of different weather conditions. As the NFL is the highest level of football on the world, coaches need to find every opportunity they can to maximize win probability, and weather-related decision-making is one area where they are failing. The second impact is from the perspective of a sports bettor. These models can allow a sports bettor to find the scenarios in which weather will have an impact on predicted play probabilities. Since we have established that these are the scenarios in which a coach is likely to make a sub-optimal decision, it opens opportunities for a bettor to bet against the coach on the team that they are playing. Of course, determining whether or not this is a legitimate strategy would take  back-testing, but the results of our models would certaintly catch the eye of any bettor looking to take advantage of mispricing of betting odds.
+Through the lens of two different game scenarios (runs/passes in early down situations, fourth downs), we were able to assess the validity of the two hypothesis that we made. First, we see that our hypotheses about weather impacting coaches was true. Based on the results of our tree models, there are weather variables that are predictors of play outcomes, both in the run/pass model and the fourth-down model. However, our second hypothesis, that weather would be a predictor of play success was not true. Temperature predictors were not significant predictors of success in both models. These takeaways have notable impacts from different perspectives. The first is from the perspective of an NFL coach. It seems that coaches do take into account weather in decision-making. Based on the results of our logistic regression models, this is misinformed, as weather has no significant impact on play success. Therefore, coaches are likely making sub-optimal decision-making in the face of different weather conditions. As the NFL is the highest level of football in the world, coaches need to find every opportunity they can to maximize win probability, and weather-related decision-making is one area where they are failing. The second impact is from the perspective of a sports bettor. These models can allow a sports bettor to find the scenarios in which weather will have an impact on predicted play probabilities. Since we have established that these are the scenarios in which a coach is likely to make a sub-optimal decision, it opens opportunities for a bettor to bet against the coach on the team that they are playing. Of course, determining whether or not this is a legitimate strategy would require back-testing, but the results of our models would certainty catch the eye of any bettor looking to take advantage of mispricing of betting odds.
 
-There are also avenues for future research in this area. In both logistic regression models, we defined the idea of play efficiency using different parameters - "Sucess", or getting a first down/touchdown on a play for our non-fourth down model, and whether or not the team ends up winning or losing for the fourth down model. These are both proxies of efficiency. In reality, there is no perfect way to determine how efficient a play is, but there are avenues a researcher could take. One way is to create a win probability model that measures probability of winning before a play and after a play, and use the difference in win probability before and after as a measurement of the efficiency of a play. 
+There are also avenues for future research in this area. In both logistic regression models, we defined the idea of play efficiency using different parameters - "Success", or getting a first down/touchdown on a play for our non-fourth down model, and whether or not the team ends up winning or losing for the fourth down model. These are both proxies of efficiency. In reality, there is no perfect way to determine how efficient a play is, but there are avenues a researcher could take. One way is to create a win probability model that measures probability of winning before a play and after a play, and use the difference in win probability before and after as a measurement of the efficiency of a play. 
 
 # Appendix
 
