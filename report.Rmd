@@ -1,5 +1,5 @@
 ---
-title: "Examining the Imapct of Weather on NFL Decision-Making"
+title: "Examining the Impact of Weather on NFL Decision-Making"
 author: "Jeff Du, Sahil Tilak"
 output:
   pdf_document: default
@@ -22,9 +22,6 @@ library(mltools)
 library(data.table)
 library(MASS)
 
-knitr::opts_chunk$set(echo = FALSE)
-knitr::opts_chunk$set(warning = FALSE)
-knitr::opts_chunk$set(message = FALSE)
 
 
 pbp <- load_pbp(2018:2020)
@@ -136,7 +133,7 @@ weather predictors are statistically significant.
 We use two datasets in our analysis. The first dataset, obtained from Kaggle,
 consists of hourly weather observations recorded from Meteostat and Weather Underground
 for games from the 2000-2001 NFL season to the 2020-2021 NFL season. In total,
-there are 37,155 hourly observations. Each observation relevant weather metrics
+there are 37,155 hourly observations. Each observation contains relevant weather metrics
 such as temperature (in Fahrenheit), dew point, humidity (0 - 100), precipitation (mm), 
 wind speed (MPH), and estimated condition. The estimated condition is qualitatively
 described, with levels such as clear, heavy rain, moderate rain, light rain, light
@@ -167,7 +164,7 @@ with hourly weather observations.
 
 ### EDA
 
-We first explore the significant of the 112,381 with respect to the current
+We first explore the signifiance of our plays with respect to the current
 game situation. Our dataset contains a win probability variable that describes
 the estimated win probability for the team in possession given the current game conditions 
 at the start of the play. Here we plot the density plot of win probabilities.
@@ -224,7 +221,7 @@ the distribution of 4th down play outcomes. The play-by-play dataset has four po
 outcomes for the roof variable: outdoors, open, closed, and dome. We will consider
 a domed stadium that has an open roof for the particular game to be equivalent
 to an outdoors stadium and a domed stadium that has a closed roof for the particular
-game to be equivalent to a non-retractable dome stadium. \
+game to be equivalent to a non-retractable dome stadium. 
 
 \newpage
 
@@ -238,6 +235,7 @@ fourth_down <- merged_df %>%
 
 ggplot(data = fourth_down, aes(fill = play_type, x = roof, y = count)) + geom_bar(position="fill", stat="identity") +
   labs(x = "Type of Stadium", y = "Percentage") +
+  theme(axis.text=element_text(size=20), legend.text = element_text(size=20)) +
   theme_bw()
 ```
 
@@ -288,13 +286,12 @@ we believe coaches could potentially consider before deciding which play to call
 range from numeric variables such as down, yard line, yards to go, and seconds
 remaining in half to categorical variables like type of stadium, type of surface,
 and game half, but all are game conditions pre-determined before the play.
-See appendix for full list of variables. 
 
 To gauge whether such variables appear to be the most influential in predicting
 run or pass plays, we use XgBoost to fit gradient-boosted decision trees
 with our label being the play type. Out of these 30 variables, 5 are categorical, 
 so we perform preprocessing through one-hot-encoding. We use a max tree depth
-of 10 and 100 rounds. Here we plot the importance feature graph from the model.
+of 10 and 50 rounds. Here we plot the importance feature graph from the model.
 
 ```{r rel_col, echo = FALSE}
 relevant_cols <- c("week", "posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
@@ -318,8 +315,8 @@ boosting_nf_train$surface <- as.factor(boosting_nf_train$surface)
 boosting_nf_train$goal_to_go <- as.factor(boosting_nf_train$goal_to_go)
 boosting_nf_train$play_type <- ifelse(boosting_nf_train$play_type == "pass", 1, 0)
  
-one_hot <- one_hot(setDT(boosting_nf_train[, relevant_cols]) )
-xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= boosting_nf_train$play_type)
+one_hot_nf <- one_hot(setDT(boosting_nf_train[, relevant_cols]) )
+xgboost_train = xgb.DMatrix(data= as.matrix(one_hot_nf), label= boosting_nf_train$play_type)
 
 
 xgboost_nf <- xgboost(data = xgboost_train,                    # the data   
@@ -381,7 +378,7 @@ nf %>%
 ```
 
 At an alpha level of .05, we observe that pressure, humidity, dewpoint, temperature,
-and precipitation are not statistically significant, though wind speed is, even after
+and precipitation are not statistically significant, while wind speed is, even after
 controlling for the type of play in the particular game scenario. 
 There is a disconnect between the perceived influence of weather on a coach's decision
 to run or pass and the impact of weather on successful play outcomes.
@@ -390,12 +387,13 @@ to run or pass and the impact of weather on successful play outcomes.
 
 Now, we want to look at the other aspect of fourth down play-calling: fourth down decision-making. 
 At each fourth down event, an offense has three decisions that can be made: go for it 
-(i.e. call a run or pass play to try and get a first down), punt, or kick a field goal. 
-First, we run a similar model where we determine the features that are important,
+(i.e. call a run or pass play to try and get a first down, punt, or kick a field goal). 
+First, we  where we determine the features that are important (XgBoost to fit gradient-boosted decision trees),
 and then use those features to implement a multinomial logistic regression model. 
 Fourth down decision-making is more clear cut than run/pass decision-making, so 
 we will filter the dataset to only include plays where outcomes may be more ambiguous
-(i.e. not going for fourth down on fourth and 20).
+(i.e. not going for fourth down on fourth and 20 or when the team with posession
+is at their own 10 yard line).
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE, output = FALSE,  results='hide'}
 relevant_cols <- c("posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
@@ -416,16 +414,22 @@ boosting_f_train$game_half <- as.factor(boosting_f_train$game_half)
 boosting_f_train$surface <- as.factor(boosting_f_train$surface)
 boosting_f_train$goal_to_go <- as.factor(boosting_f_train$goal_to_go)
 
-one_hot <- one_hot(setDT(boosting_f_train[, relevant_cols]) )
+one_hot_f <- one_hot(setDT(boosting_f_train[, relevant_cols]) )
 
+as.factor(boosting_f_train$play_type)
 
+boosting_f_train$play_type[boosting_f_train$play_type == "pass"] <- 1
+boosting_f_train$play_type[boosting_f_train$play_type == "run"] <- 3
+boosting_f_train$play_type[boosting_f_train$play_type == "punt"] <- 2
+boosting_f_train$play_type[boosting_f_train$play_type == "field_goal"] <- 0
+boosting_f_train$play_type <- as.numeric(boosting_f_train$play_type)
 
-xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= as.factor(boosting_f_train$play_type))
+xgboost_train = xgb.DMatrix(data= as.matrix(one_hot_f), label= boosting_f_train$play_type)
 
 
 xgboost_f <- xgboost(data = xgboost_train,                    # the data   
                  max.depth= 10,                          # max depth 
-                 nrounds= 50)
+                 nrounds= 50, objective = "multi:softmax", num_class = 4)
 
 ```
 
@@ -434,7 +438,8 @@ xgb_f <- xgb.importance(colnames(one_hot), model = xgboost_f)
 xgb.plot.importance(xgb_f)
 ```
 
-From the feature importance graph, we find that humidity, pressure, and temperature 
+Our training log loss was .005.
+From the feature importance graph, we find that pressure and temperature 
 are among the 10 most influential variables (as quantified by Gain), 
 but the predominant variables in
 terms of feature importance are the current yard line position and yards to go.
@@ -444,7 +449,7 @@ are in the opponent's territory.
 Now, we run a logistic regression model to determine if weather has a significant effect on play outcomes. 
 Instead of using series success rate as the response variable for this model, 
 we choose to use the result of the game (1 if the possession team wins and 0 if the possession team loses) 
-as a proxy for measuring success of plays. We fit the model with all predictors 
+as a proxy for measuring the success of plays. We fit the model with all predictors 
 that recorded a Gain metric above .005 in our gradient-boosted model, with an 
 exception for precipitation as we want to conduct inference on all weather predictors.
 Below is the full model:
@@ -501,7 +506,7 @@ There are also avenues for future research in this area. In both logistic regres
 
 # Appendix
 
-### Testing
+### Testing Non Fourth Down
 
 We use the same gradient-boosted model on our test dataset of 2020 plays. First,
 we plot the confusion matrix for non fourth down plays, where the error rate is
@@ -524,8 +529,6 @@ y_pred <- predict(xgboost_nf, as.matrix(one_hot_testnf))
 y_pred <- ifelse(y_pred >.5, 1, 0)
 ```
 
-Here.
-
 ```{r echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
 conf_matrix <- table(Actual = boosting_nf_test$play_type, Predicted = y_pred)
 rownames(conf_matrix) <- c("Run", "Pass")
@@ -533,8 +536,72 @@ colnames(conf_matrix) <- c("Run", "Pass")
 
 conf_matrix
 ```
+### Testing Fourth Down
+
+We use the same gradient-boosted model on our test dataset of 2020 plays. First,
+we plot the confusion matrix for non fourth down plays, where the error rate is
+41%. We notice that while the model is very good at classifying punt situations
+as punts (as punting is often times the only option if the team with possession
+is in their own territory), it incorrectly classified many field goals as run plays.
+
+```{r}
+relevant_cols <- c("posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
+                  "game_seconds_remaining", "game_half", "drive", "qtr", "down", "goal_to_go", "ydstogo",
+                  "posteam_timeouts_remaining", "defteam_timeouts_remaining",
+                   "score_differential", "season", "series", "drive_play_count", "drive_first_downs",
+                   "Temperature", "DewPoint", "Humidity", "Precipitation", "WindSpeed", "Pressure", "surface")
+
+boosting_f_test <- test_f_data %>%
+  filter(play_type == "pass" | play_type == "run" | play_type == "field_goal" | play_type == "punt") %>%
+  filter((wp <= .90) | (wp >= .1)) %>%
+  filter((ydstogo <= 3) | (yardline_100 <= 50) | (yardline_100 >= 30))  %>%
+  filter(roof == "outdoors")
+
+boosting_f_test$roof <- as.factor(boosting_f_test$roof)
+boosting_f_test$posteam_type <- as.factor(boosting_f_test$posteam_type)
+boosting_f_test$game_half <- as.factor(boosting_f_test$game_half)
+boosting_f_test$surface <- as.factor(boosting_f_test$surface)
+boosting_f_test$goal_to_go <- as.factor(boosting_f_test$goal_to_go)
+
+one_hot_testf <- one_hot(setDT(boosting_f_test[, relevant_cols]) )
+one_hot_testf$surface_a_turf = 0
+one_hot_testf <- one_hot_testf %>% relocate(surface_a_turf, .before = surface_astroturf)
+
+y_pred <- predict(xgboost_f, as.matrix(one_hot_testf))
+
+```
+
+```{r echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+boosting_f_test$play_type[boosting_f_test$play_type == "pass"] <- 1
+boosting_f_test$play_type[boosting_f_test$play_type == "run"] <- 3
+boosting_f_test$play_type[boosting_f_test$play_type == "punt"] <- 2
+boosting_f_test$play_type[boosting_f_test$play_type == "field_goal"] <- 0
+boosting_f_test$play_type <- as.numeric(boosting_f_test$play_type)
+
+confusion_matrix <- table(Actual = boosting_f_test$play_type, Predicted = y_pred)
+rownames(confusion_matrix) <- c("Field Goal", "Pass", "Punt", "Run")
+colnames(confusion_matrix) <- c("Field Goal", "Pass", "Punt", "Run")
+
+confusion_matrix
+```
+\newpage
+
+## Run/Pass Model on Non-Fourth Down Plays
+
+### Full Model Output
+
+```{r}
+nf <- summary(nf_model)
+nf <- nf$coefficients[, ]
+nf <- as.data.frame(nf)
+colnames(nf) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
+nf %>%
+  mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  kable(digits = 3)
 
 ## Model Diagnostics: Run/Pass Model on Non-Fourth Down Plays
+
+```
 
 ```{r}
 plot(nf_model)
@@ -545,6 +612,7 @@ plot(nf_model)
 ```{r}
 plot(f_model)
 ```
+
 
 
 
