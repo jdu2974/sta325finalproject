@@ -497,7 +497,56 @@ drive decision-making.
 
 Through the lens of two different game scenarios (runs/passes in early down situations, fourth downs), we were able to assess the validity of the two hypothesis that we made. First, we see that our hypothesis about weather impacting coaches was true. Based on the results of our tree models, there are weather variables that are predictors of play outcomes, both in the run/pass model and the fourth-down model. However, our second hypothesis, that weather would be a predictor of play success was not true. Temperature predictors were not significant predictors of success in both models. These takeaways have noteable impacts from different perspectives. The first is from the perspective of an NFL coach. It seems that coaches do take into account weather in decision-making. Based on the results of our logistic regression models, this is mis-informed, as weather has no significant impact on how impactful a play is. Therefore, coaches are likely making sub-optimal decision-making in the face of different weather conditions. As the NFL is the highest level of football on the world, coaches need to find every opportunity they can to maximize win probability, and weather-related decision-making is one area where they are failing. The second impact is from the perspective of a sports bettor. These models can allow a sports bettor to find the scenarios in which weather will have an impact on predicted play probabilities. Since we have established that these are the scenarios in which a coach is likely to make a sub-optimal decision, it opens opportunities for a bettor to bet against the coach on the team that they are playing. Of course, determining whether or not this is a legitimate strategy would take  back-testing, but the results of our models would certaintly catch the eye of any bettor looking to take advantage of mispricing of betting odds.
 
-There are also avenues for future research in this area. In both logistic regression models, we defined the idea of play efficiency using different parameters - "Sucess", or getting a first down/touchdown on a play for our non-fourth down model, and whether or not the team ends up winning or losing for the fourth down model. These are both proxies of efficiency. In reality, there is no perfect way to determine how efficient a play is, but there are avenues a researcher could take. One way is to create a win probability model that measures probability of winning before a play and after a play, and use the difference in win probability before and after as a measurement of the efficiency of a play. 
+There are also avenues for future research in this area. In both logistic regression models, we defined the idea of play efficiency using different parameters - "Success", or getting a first down/touchdown on a play for our non-fourth down model, and whether or not the team ends up winning or losing for the fourth down model. These are both proxies of efficiency. In reality, there is no perfect way to determine how efficient a play is, but there are avenues a researcher could take. One way is to create a win probability model that measures probability of winning before a play and after a play, and use the difference in win probability before and after as a measurement of the efficiency of a play. 
+
+# Appendix
+
+## Run/Pass Model on Non-Fourth Down Plays
+
+### Full Model Output
+
+```{r}
+nf <- summary(nf_model)
+nf <- nf$coefficients[, ]
+nf <- as.data.frame(nf)
+colnames(nf) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
+nf %>%
+  mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  kable(digits = 3)
+```
+
+
+### Model Diagnostics
+
+```{r}
+plot(nf_model)
+```
+
+## Fourth Down Plays
+
+### Full Model Output
+
+```{r}
+f <- summary(f_model)
+f <- f$coefficients[, ]
+f <- as.data.frame(f)
+colnames(f) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
+f %>%
+  mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  kable(digits = 3)
+```
+
+
+### Model Diagnostics: Fourth Down Model
+
+```{r}
+plot(f_model)
+```
+
+
+
+
+
 
 # Appendix
 
