@@ -22,8 +22,6 @@ library(mltools)
 library(data.table)
 library(MASS)
 
-
-
 pbp <- load_pbp(2018:2020)
 
 # Data Cleaning
@@ -125,7 +123,7 @@ see if weather conditions appear to be "important" in predicting a coach's decis
 From there, we will fit two logistic regression models with the features we deemed
 relevant, with the response variables being outcomes of success for the particular
 down (first down and touchdown for non fourth down plays, and if the team in 
-possession eventually won the game for fourth down plays). We examine if the
+possession eventually won the game for fourth down plays). We examine whether the
 weather predictors are statistically significant.
 
 ### Data Description
@@ -135,7 +133,7 @@ consists of hourly weather observations recorded from Meteostat and Weather Unde
 for games from the 2000-2001 NFL season to the 2020-2021 NFL season. In total,
 there are 37,155 hourly observations. Each observation contains relevant weather metrics
 such as temperature (in Fahrenheit), dew point, humidity (0 - 100), precipitation (mm), 
-wind speed (MPH), and estimated condition. The estimated condition is qualitatively
+and wind speed (MPH). The estimated condition is qualitatively
 described, with levels such as clear, heavy rain, moderate rain, light rain, light
 snow, and moderate snow.
 
@@ -187,7 +185,7 @@ merged_df <- merged_df %>%
   filter(wp >= .10 & wp <= .90)
 ```
 
-From these plays, we consider how playcalling on first, second, and third downs vary versus fourth
+From these plays, we consider how playcalling on first, second, and third downs varies versus fourth
 downs. We display the number of occurrences of each play type among non fourth
 down plays versus fourth down plays from our training datasets. 
 
@@ -416,8 +414,6 @@ boosting_f_train$goal_to_go <- as.factor(boosting_f_train$goal_to_go)
 
 one_hot_f <- one_hot(setDT(boosting_f_train[, relevant_cols]) )
 
-as.factor(boosting_f_train$play_type)
-
 boosting_f_train$play_type[boosting_f_train$play_type == "pass"] <- 1
 boosting_f_train$play_type[boosting_f_train$play_type == "run"] <- 3
 boosting_f_train$play_type[boosting_f_train$play_type == "punt"] <- 2
@@ -506,13 +502,21 @@ There are also avenues for future research in this area. In both logistic regres
 
 # Appendix
 
-### Testing Non Fourth Down
+### Non Fourth Down Test Dataset
 
 We use the same gradient-boosted model on our test dataset of 2020 plays. First,
 we plot the confusion matrix for non fourth down plays, where the error rate is
-35%
+35%.
 
-```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE, results='hide',eval = FALSE}
+```{r boost_nf, message = FALSE, warning = FALSE, echo = FALSE}
+relevant_cols <- c("week", "posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
+                  "game_seconds_remaining", "game_half", "drive", "qtr", "down", "goal_to_go", "ydstogo",
+                  "posteam_timeouts_remaining", "defteam_timeouts_remaining", "total_home_score", "total_away_score", 
+                  "posteam_score", "defteam_score",
+                   "score_differential", "season", "series", "drive_play_count", "drive_first_downs",
+                   "Temperature", "DewPoint", "Humidity", "Precipitation", "WindSpeed", "Pressure", "surface")
+
+
 boosting_nf_test <- test_nf_data %>%
   filter(play_type == "pass" | play_type == "run") %>%
   filter(roof == "outdoors")
@@ -529,14 +533,14 @@ y_pred <- predict(xgboost_nf, as.matrix(one_hot_testnf))
 y_pred <- ifelse(y_pred >.5, 1, 0)
 ```
 
-```{r echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+```{r echo = FALSE, message = FALSE, warning = FALSE}
 conf_matrix <- table(Actual = boosting_nf_test$play_type, Predicted = y_pred)
 rownames(conf_matrix) <- c("Run", "Pass")
 colnames(conf_matrix) <- c("Run", "Pass")
 
 conf_matrix
 ```
-### Testing Fourth Down
+### Fourth Down Test Dataset
 
 We use the same gradient-boosted model on our test dataset of 2020 plays. First,
 we plot the confusion matrix for non fourth down plays, where the error rate is
@@ -544,7 +548,7 @@ we plot the confusion matrix for non fourth down plays, where the error rate is
 as punts (as punting is often times the only option if the team with possession
 is in their own territory), it incorrectly classified many field goals as run plays.
 
-```{r}
+```{r echo = FALSE, warning = FALSE, message = FALSE}
 relevant_cols <- c("posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
                   "game_seconds_remaining", "game_half", "drive", "qtr", "down", "goal_to_go", "ydstogo",
                   "posteam_timeouts_remaining", "defteam_timeouts_remaining",
@@ -571,7 +575,7 @@ y_pred <- predict(xgboost_f, as.matrix(one_hot_testf))
 
 ```
 
-```{r echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+```{r echo = FALSE, message = FALSE, warning = FALSE}
 boosting_f_test$play_type[boosting_f_test$play_type == "pass"] <- 1
 boosting_f_test$play_type[boosting_f_test$play_type == "run"] <- 3
 boosting_f_test$play_type[boosting_f_test$play_type == "punt"] <- 2
@@ -590,7 +594,7 @@ confusion_matrix
 
 ### Full Model Output
 
-```{r}
+```{r echo = FALSE, warning = FALSE, message = FALSE}
 nf <- summary(nf_model)
 nf <- nf$coefficients[, ]
 nf <- as.data.frame(nf)
@@ -598,21 +602,18 @@ colnames(nf) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
 nf %>%
   mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
   kable(digits = 3)
-
-## Model Diagnostics: Run/Pass Model on Non-Fourth Down Plays
-
 ```
 
-```{r}
-plot(nf_model)
+## Fourth Down Model
+
+### Full Model Output
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+f <- summary(f_model)
+f <- f$coefficients[, ]
+f <- as.data.frame(f)
+colnames(f) <- list("Estimate", "Standard Error", "Z Value", "Pr(>|z|)")
+f %>%
+  mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  kable(digits = 3)
 ```
-
-## Model Diagnostics: Fourth Down Model
-
-```{r}
-plot(f_model)
-```
-
-
-
-
