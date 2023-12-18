@@ -1,9 +1,10 @@
 ---
 title: "Examinng the Imapct of Weather on NFL Decision-Making"
+author: "Jeff Du, Sahil Tilak"
 output:
   pdf_document: default
   html_document: default
-date: "2023-12-04"
+date: "2023-12-17"
 ---
 
 ```{r data, include=FALSE}
@@ -20,6 +21,7 @@ library(xgboost)
 library(mltools)
 library(data.table)
 library(MASS)
+library(kableExtra)
 
 knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_chunk$set(warning = FALSE)
@@ -55,9 +57,9 @@ merged_df <- merge(pbp, weather_clean, by=c("old_game_id","time_of_day")) %>%
 # Introduction
 
 NFL head coaches are constantly under scrutiny, whether warranted or unwarranted,
-for the decisions made over the course of game that ultimately lead to a win or loss.
+for the decisions made over the course of the game that ultimately lead to a win or loss.
 Coaches have a variety of options at their disposal depending on the current
-condition and momentum of the game, and most of their decision making stems from
+condition and momentum of the game, and most of their decision-making stems from
 a primarily objective examination of their team's needs. Third and 10 down 20 points
 in the 4th quarter? In all likelihood a pass play to try and mount a comeback. Fourth and 20 up 
 10? Most likely a punt to minimize the risk of giving good field position to the
@@ -65,19 +67,19 @@ opponent. Coaches, players, and fans can on the whole agree on the right play-ca
 in many hypothetical game scenarios.
 
 However, every coach suffers from inherent biases that have the potential to impair
-their judgement and decision making when baselined against a baseline of rationality.
+their judgment and decision making when baselined against a baseline of rationality.
 For example, the hot-hand fallacy has been extensively studied across varying
 sports (though primarily in basketball), with little statistical evidence to 
-support the notion that athletes experiencing a positive outcomes are more 
+support the notion that athletes experiencing positive outcomes are more 
 likely to experience it repeatedly. Yet in practice, coaches will often apply
 decision making that has worked in the past in new situations despite adverse
 conditions for success. Entrusted with managing numerous responsibilities throughout
 the game, coaches must rely on heuristics and past anecdotal experiences to guide
 them throughout the game, resulting in these observed biases. 
 
-One key consideration that consistently affects game-planning and subsequently
-decision-making are the weather conditions. For stadiums that have an open roof
-(there are 22 outdoor stadiums an additional 5 domed stadiums with retractable
+Key considerations that consistently affect game planning and subsequently
+decision-making are the game's weather conditions. For stadiums that have an open roof
+(there are 22 outdoor stadiums and an additional 5 domed stadiums with retractable
 roofs), games are subject to the effects of the surrounding climate: temperature,
 humidity, wind speed, and precipitation. In contrast, closed stadiums fine-tune
 and control for climate, reducing the influence of the aforementioned conditions
@@ -86,7 +88,7 @@ to essentially 0.
 All of these weather measures have the potential to affect
 the probability of success for any given play. High wind speeds can
 affect both the trajectory and velocity of passes, potentially lowering the probability
-of a completion, while high humidity results in less dense air that allows footballs
+of a completion, while high humidity results in less dense air that allows a football
 to travel farther, potentially increasing the probability of a field goal conversion.
 Unfortunately, there has been minimal existing literature exploring the effects of temperature
 on NFL games, and most of that has been amateur-led and conducted with a primary
@@ -104,7 +106,7 @@ or pass, do the weather conditions impact the coach's ultimate decision making?
 
 2. Similarly, for fourth down plays in which the decision tree expands to include
 punting and kicking a field goal, do the weather conditions play any role in
-influencing the coach's ultimate decision-making?
+influencing the coach's ultimate decision making?
 
 3. For both non fourth down and fourth down plays, do weather conditions have 
 any impact on the probability of a successful outcome (first down, touchdown,
@@ -126,8 +128,9 @@ the end play call of a particular situation in order to gauge feature importance
 see if weather conditions appear to be "important" in predicting a coach's decision-making.
 From there, we will fit two logistic regression models with the features we deemed
 relevant, with the response variables being outcomes of success for the particular
-down (first down and touchdown for non fourth down plays, ___ for fourth down
-plays).
+down (first down and touchdown for non fourth down plays, and if the team in 
+possession eventually won the game for fourth down plays). We examine if the
+weather predictors are statistically significant.
 
 ### Data Description
 
@@ -163,7 +166,6 @@ are able to merge the two datasets, and after filtering out plays that do not ha
 a specified down (kickoffs, extra points, timeouts), we are left with 112,381 plays
 with hourly weather observations.
 
-
 ### EDA
 
 We first explore the significant of the 112,381 with respect to the current
@@ -190,7 +192,7 @@ merged_df <- merged_df %>%
 ```
 
 From these plays, we consider how playcalling on first, second, and third downs vary versus fourth
-downs. We display the number of occurrences of each play type among non-fourth
+downs. We display the number of occurrences of each play type among non fourth
 down plays versus fourth down plays from our training datasets. First, for non
 fourth down plays:
 
@@ -198,7 +200,7 @@ fourth down plays:
 freq_nf <- as.data.frame(table(merged_df[merged_df$down != 4,]$play_type))
 freq_nf$Var1 <- c("Field Goal", "No Play", "Pass", "QB Kneel", "QB Spike", "Run")
 colnames(freq_nf) <- c("Play Type", "Frequency")
-kable(freq_nf)
+kable(freq_nf) %>% kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
 Then, for fourth down plays:
@@ -207,7 +209,7 @@ Then, for fourth down plays:
 freq_f <- as.data.frame(table(merged_df[merged_df$down == 4,]$play_type))
 freq_f$Var1 <- c("Field Goal", "No Play", "Pass", "Punt", "Run")
 colnames(freq_f) <- c("Play Type", "Frequency")
-kable(freq_f)
+kable(freq_f) %>% kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
 As expected, coaches will never punt and only kick field goals near the end
@@ -250,7 +252,7 @@ We will use plays from the 2018-2019 and 2019-2020 seasons as our training set
 (25430 non-fourth-down plays and 2618 fourth down plays) as our test set. This roughly
 corresponds to a 2/3 train-test split for both non-fourth-down and fourth down plays.
 
-```{r split,  echo = FALSE}
+```{r wtf,  echo = FALSE}
 training_nf_data <- merged_df %>%
   filter(season == 2018 | season == 2019) %>%
   filter(down != 4)
@@ -320,7 +322,7 @@ xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= boosting_nf_train$p
 
 xgboost_nf <- xgboost(data = xgboost_train,                    # the data   
                  max.depth= 10,                          # max depth 
-                 nrounds=100, objective = "binary:logistic")
+                 nrounds= 50, objective = "binary:logistic")
 
 ```
 
@@ -331,6 +333,7 @@ xgb.plot.importance(xgb_nf)
 
 xgb_cols <- (xgb_nf %>% filter(Gain >= .01))$Feature
 ```
+
 Our training log loss was .22. From the feature importance graph,
 we find that Pressure, Humidity, DewPoint, and Temperature have some of the 
 highest feature scores (as quantified by Gain), indicating that such conditions 
@@ -344,9 +347,14 @@ with the response being a binary variable that records whether or not the play
 satisfied the aforementioned conditions. We fit the model with all predictors 
 that recorded a Gain metric above .01 in our gradient-boosted model, with an 
 exception for precipitation as we want to conduct inference on all weather predictors. 
-We now include play type as a predictor
-to control for differences in run and pass plays. We display the estimates
-for our weather predictors.
+We now include play type as a predictor to control for differences in run and pass plays. 
+Here we display the full model:
+
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1{\text{Pressure}} + \beta_2{\text{Wind Speed}} + \beta_3{\text{Humidity}} + \beta_4{\text{Temperature}} + \beta_5{\text{Precipitation}} + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}}  + \sum_{j = 8}^{18}\beta_jX_j$$
+
+In our regression, the pass play type is the base group.
+
+$\sum_{j = 8}^{18}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
 ```{r glm_nf, echo = FALSE, message = FALSE, warning = FALSE}
 rel_df <- training_nf_data  %>%
@@ -370,17 +378,20 @@ nf %>%
 
 At an alpha level of .05, we observe that pressure, humidity, dewpoint, temperature,
 and precipitation are not statistically significant, though wind speed is, even after
-controlling for type of play. There is a disconnect between the perceived influence of weather on a coach's decision
+controlling for the type of play in the particular game scenario. 
+There is a disconnect between the perceived influence of weather on a coach's decision
 to run or pass and the impact of weather on successful play outcomes.
-Backwards selection with our full model resulted in only temperature, dewpoint,
-week of game, and seconds remaining in game variables being removed.
-
 
 # Fourth Down
 
-
-Now, we want to look at the other aspect of fourth down play-calling: Fourth Down decision making. At each fourth down event, an offense has three decisions that can be made: go for it (i.e. call a run or pass play to try and get a first down), punt, or kick a field goal. First, we run a similar model where we determine the features that are important, and then use those features to implement a multinomial logistic regression model. Fourth down decision making is more clear cut than run/pass decision making, so we will filter the dataset to only include plays where outcomes may be more ambiguous
-
+Now, we want to look at the other aspect of fourth down play-calling: fourth down decision making. 
+At each fourth down event, an offense has three decisions that can be made: go for it 
+(i.e. call a run or pass play to try and get a first down), punt, or kick a field goal. 
+First, we run a similar model where we determine the features that are important,
+and then use those features to implement a multinomial logistic regression model. 
+Fourth down decision making is more clear cut than run/pass decision making, so 
+we will filter the dataset to only include plays where outcomes may be more ambiguous
+(i.e. not going for fourth down on fourth and 20).
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE, output = FALSE,  results='hide'}
 relevant_cols <- c("posteam_type", "yardline_100", "quarter_seconds_remaining", "half_seconds_remaining",
@@ -410,26 +421,38 @@ xgboost_train = xgb.DMatrix(data= as.matrix(one_hot), label= as.factor(boosting_
 
 xgboost_f <- xgboost(data = xgboost_train,                    # the data   
                  max.depth= 10,                          # max depth 
-                 nrounds=100)
+                 nrounds= 50)
 
 ```
 
-```{r}
+```{r message = FALSE, warning = FALSE}
 xgb_f <- xgb.importance(colnames(one_hot), model = xgboost_f)
 xgb.plot.importance(xgb_f)
 ```
 
+From the feature importance graph, we find that Humidity, Pressure, and Temperature 
+are among the 10 have some of the highest feature scores (as quantified by Gain), 
+but the predominant variable in
+terms of feature importance is the current yard line position and yards to go.
+This intuitively makes sense, because teams generally only go for it when they
+are in the opponent's territory. 
 
-Now, we run a logistic regression model to determine if weather has a significant effect on play outcomes. Instead of using series success rate as the response variable for this model, we choose to use the result of the game (1 if the possession team wins and 0 if the possession team loses) as a proxy for measuring success of plays. Below is the full model
+Now, we run a logistic regression model to determine if weather has a significant effect on play outcomes. 
+Instead of using series success rate as the response variable for this model, 
+we choose to use the result of the game (1 if the possession team wins and 0 if the possession team loses) 
+as a proxy for measuring success of plays. We fit the model with all predictors 
+that recorded a Gain metric above .005 in our gradient-boosted model, with an 
+exception for precipitation as we want to conduct inference on all weather predictors.
+Below is the full model:
 
 $$Pr(\text{Outcome}_i = \text{Win}) = \pi_i$$
-$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1{\text{Pressure}} + \beta_2{\text{Wind Speed}} + \beta_3{\text{Humidity}} + \beta_4{\text{Temperature}} + \beta_5{\text{Precipitation}} + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 8}^{p}\beta_jX_j$$
+$$log(\frac{\pi_i}{1-\pi_i}) = \beta_0 + \beta_1{\text{Pressure}} + \beta_2{\text{Wind Speed}} + \beta_3{\text{Humidity}} + \beta_4{\text{Temperature}} + \beta_5{\text{Precipitation}} + \beta_6{\text{Dewpoint}} + \beta_7{\text{Run}} + \beta_8{\text{Pass}} + \beta_9{\text{Punt}}  + \sum_{j = 10}^{18}\beta_jX_j$$
 
 $\beta_7 ... \beta_9$ indicate the the play types for which we are predicting outcomes. In our regression, the field goal play type is the base group.
 
-$\sum_{j = 8}^{p}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
+$\sum_{j = 10}^{18}\beta_jX_j$ indicates all predictor variables not related to play type or weather that were significant from the tree-based model (i.e. Yard Line, Yards to Go for a First Down, Time Remaining in the Half, etc). 
 
-```{r}
+```{r echo = FALSE, warning = FALSE, message = FALSE}
 xgb_cols <- (xgb_f %>% filter(Gain >= .005))$Feature
 rel_df <- training_f_data  %>%
   filter(play_type == "pass" | play_type == "run" | play_type == "field_goal" | play_type == "punt") %>%
@@ -446,7 +469,6 @@ rel_df <- training_f_data  %>%
 rel_df <- rel_df[, c(xgb_cols, "play_type", "Precipitation", "label")]
 
 f_model <- glm(label ~., data = rel_df, family = "binomial")
-
 f <- summary(f_model)
 f <- f$coefficients[c("Pressure","Humidity", "DewPoint", "Temperature", "WindSpeed", "Precipitation"),]
 f <- as.data.frame(f)
@@ -457,7 +479,14 @@ f %>%
   kable(digits = 3)
 ```
 
-From the model, we can see that the only weather variable that has a significant impact on play outcomes (in terms of wins and losses) is wind speed. This is indicated by the fact that it is the only weather variable that has a p-value < .05. 
+At an alpha level of .05, we observe that pressure, humidity, dewpoint, temperature,
+and precipitation are not statistically significant, though wind speed is, even after
+controlling for the type of play in the particular game scenario. 
+There is a disconnect between the perceived influence of weather on a coach's decision
+to run or pass and the impact of weather on successful play outcomes. We determine
+that weather does not particularly drive a coach's decision-making on fourth down,
+and that the current game circumstances (yards to go and yardline) predominantly
+drive decisionmaking.
 
 # Conclusion
 
